@@ -415,7 +415,16 @@ static void ev_handler(struct mg_connection *c, int ev, void *ev_data) {
   }
 }
 
-// ── PTY → WebSocket broadcast ──
+// ── Nostr + WebRTC signaling ──
+#include "nostr.h"
+#include "webrtc.h"
+
+static nostr_ctx_t g_nostr;
+static webrtc_ctx_t g_webrtc;
+static int g_nostr_enabled = 0;
+static time_t g_nostr_last_publish = 0;
+
+// ── PTY → WebSocket + WebRTC broadcast ──
 static void poll_pty(void) {
   if (g_pty_fd < 0) return;
   unsigned char buf[4096];
@@ -427,28 +436,53 @@ static void poll_pty(void) {
   size_t elen = b64enc(buf, (size_t)n, enc);
   char msg[16384];
   int mlen = snprintf(msg, sizeof(msg), "{\"type\":\"cli\",\"data\":\"%.*s\"}", (int)elen, enc);
-  if (mlen > 0 && (size_t)mlen < sizeof(msg)) send_all(msg, (size_t)mlen);
+  if (mlen > 0 && (size_t)mlen < sizeof(msg)) {
+    send_all(msg, (size_t)mlen);
+    // Also send over WebRTC DataChannel
+    if (g_webrtc.connected) {
+      int rc = webrtc_send(&g_webrtc, msg, mlen);
+      fprintf(stderr, "  webrtc: sent %d bytes (rc=%d)\n", mlen, rc);
+    }
+  }
 }
-
-// ── Nostr + WebRTC signaling ──
-#include "nostr.h"
-#include "webrtc.h"
-
-static nostr_ctx_t g_nostr;
-static webrtc_ctx_t g_webrtc;
-static int g_nostr_enabled = 0;
-static time_t g_nostr_last_publish = 0;
 
 static void on_webrtc_open(void *userdata) {
   (void)userdata;
-  fprintf(stderr, "  → WebRTC echo server ready\n");
+  fprintf(stderr, "  → WebRTC peer connected\n");
+  // Don't send data from this callback (runs on libdatachannel thread).
+  // PTY data will flow via poll_pty on the main thread.
 }
 
 static void on_webrtc_message(const char *data, int len, void *userdata) {
   (void)userdata;
-  // Echo mode: send back what we received
-  fprintf(stderr, "  echo: %.*s\n", len, data);
-  webrtc_send(&g_webrtc, data, len);
+
+  // Parse message type
+  size_t tlen = 0;
+  const char *type = jstr(data, (size_t)len, "type", &tlen);
+  if (!type) return;
+
+  // CLI input (keystrokes → PTY)
+  if (tlen == 3 && !memcmp(type, "cli", 3)) {
+    if (g_pty_fd < 0) return;
+    size_t bl; const char *b = jstr(data, (size_t)len, "data", &bl);
+    if (!b) return;
+    unsigned char dec[4096];
+    size_t dl = b64dec(b, bl, dec);
+    if (dl > 0) write(g_pty_fd, dec, dl);
+    return;
+  }
+
+  // Resize
+  if (tlen == 6 && !memcmp(type, "resize", 6)) {
+    if (g_pty_fd < 0) return;
+    int cols = 80, rows = 24;
+    jint(data, (size_t)len, "cols", &cols);
+    jint(data, (size_t)len, "rows", &rows);
+    struct winsize ws = {.ws_row = (unsigned short)rows, .ws_col = (unsigned short)cols};
+    ioctl(g_pty_fd, TIOCSWINSZ, &ws);
+    if (g_child_pid > 0) kill(g_child_pid, SIGWINCH);
+    return;
+  }
 }
 
 static void on_webrtc_close(void *userdata) {

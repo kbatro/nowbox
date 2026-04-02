@@ -294,6 +294,14 @@ static void relay_handler(struct mg_connection *c, int ev, void *ev_data) {
     }
     size_t content_len = (size_t)(end - content_key);
 
+    // Skip events older than 30 seconds
+    const char *ts_key = strstr(data, "\"created_at\":");
+    if (ts_key) {
+      int64_t event_ts = (int64_t)atoll(ts_key + 13);
+      int64_t now_ts = (int64_t)time(NULL);
+      if (now_ts - event_ts > 30) return;
+    }
+
     // Extract event ID for dedup
     const char *id_key = strstr(data, "\"id\":\"");
     if (id_key) {
