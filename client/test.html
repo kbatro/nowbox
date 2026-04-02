@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html>
+<head><title>nowbox wave1</title></head>
+<body style="background:#111;color:#eee;font-family:monospace;padding:20px">
+<h2>nowbox wave1 — WebRTC over Nostr</h2>
+<div id="status" style="color:#ff0;margin:10px 0">◌ connecting to nostr...</div>
+<div style="margin:10px 0">
+  <input id="msg" placeholder="type a message" style="width:300px;padding:6px;background:#222;color:#eee;border:1px solid #555;font-family:monospace">
+  <button id="send" onclick="sendMsg()" style="padding:6px 12px;font-family:monospace" disabled>send</button>
+</div>
+<pre id="log" style="font-size:13px;line-height:1.4"></pre>
+
+<script type="module">
+import { schnorr, secp256k1 } from 'https://esm.sh/@noble/curves@1.8.2/secp256k1';
+
+// -- Config --
+const SECRET = 'test123';
+const RELAYS = ['wss://nos.lol', 'wss://relay.damus.io'];
+const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
+
+// -- State --
+let pc = null;
+let dc = null;
+let relayConns = [];
+let privkey, pubkey, topic;
+let publishedIds = new Set();
+
+// -- Helpers --
+const log = (s) => { document.getElementById('log').textContent += s + '\n'; };
+const setStatus = (s, color) => {
+  document.getElementById('status').textContent = s;
+  document.getElementById('status').style.color = color || '#ff0';
+};
+
+function toHex(bytes) {
+  return Array.from(new Uint8Array(bytes)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function fromHex(hex) {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+  return bytes;
+}
+
+async function sha256(data) {
+  const encoded = typeof data === 'string' ? new TextEncoder().encode(data) : data;
+  return new Uint8Array(await crypto.subtle.digest('SHA-256', encoded));
+}
+
+function escapeJsonString(s) {
+  return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t');
+}
+
+// -- Nostr crypto --
+async function initKeys() {
+  const privBytes = await sha256(SECRET);
+  privkey = toHex(privBytes);
+  pubkey = toHex(secp256k1.getPublicKey(privkey, true).slice(1)); // x-only (32 bytes)
+  topic = toHex(await sha256('nowbox-topic:' + SECRET));
+}
+
+async function signEvent(event) {
+  // Serialize for ID: [0, pubkey, created_at, kind, tags, content]
+  const serialized = JSON.stringify([
+    0,
+    event.pubkey,
+    event.created_at,
+    event.kind,
+    event.tags,
+    event.content
+  ]);
+  const id = toHex(await sha256(serialized));
+  event.id = id;
+
+  // Schnorr sign
+  const sig = await schnorr.sign(fromHex(id), fromHex(privkey));
+  event.sig = toHex(sig);
+  return event;
+}
+
+async function nostrPublish(content) {
+  const event = await signEvent({
+    kind: 20100,
+    created_at: Math.floor(Date.now() / 1000),
+    tags: [['d', topic]],
+    content: content,
+    pubkey: pubkey
+  });
+
+  publishedIds.add(event.id);
+
+  const msg = JSON.stringify(['EVENT', event]);
+  let sent = 0;
+  for (const ws of relayConns) {
+    if (ws.readyState === 1) {
+      ws.send(msg);
+      sent++;
+    }
+  }
+  log('  publish: sent to ' + sent + '/' + relayConns.length + ' relays, id=' + event.id.slice(0,16) + '...');
+}
+
+// -- WebRTC --
+async function handleOffer(sdp) {
+  if (pc) return; // already connecting
+
+  log('');
+  log('=== received WebRTC offer (' + sdp.length + ' bytes) ===');
+  setStatus('◌ negotiating WebRTC...', '#ff0');
+
+  pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+
+  pc.onicecandidate = async (e) => {
+    if (!e.candidate) return;
+    log('  → ICE: ' + e.candidate.candidate.slice(0, 50) + '...');
+    await nostrPublish(JSON.stringify({
+      type: 'candidate',
+      candidate: e.candidate.candidate,
+      sdpMid: e.candidate.sdpMid || '0',
+      sdpMLineIndex: e.candidate.sdpMLineIndex || 0
+    }));
+  };
+
+  pc.onconnectionstatechange = () => {
+    log('  connection: ' + pc.connectionState);
+    if (pc.connectionState === 'connected') setStatus('● connected (p2p)', '#0f0');
+    if (pc.connectionState === 'failed') setStatus('✗ connection failed', '#f00');
+  };
+
+  pc.ondatachannel = (e) => {
+    dc = e.channel;
+    log('  DataChannel: ' + dc.label);
+    dc.onopen = () => {
+      log('  ● DataChannel OPEN!');
+      document.getElementById('send').disabled = false;
+      setStatus('● connected (p2p)', '#0f0');
+    };
+    dc.onmessage = (e) => log('  ← ' + e.data);
+    dc.onclose = () => {
+      log('  DataChannel closed');
+      setStatus('○ disconnected', '#f00');
+      document.getElementById('send').disabled = true;
+    };
+  };
+
+  await pc.setRemoteDescription({ type: 'offer', sdp });
+  log('  set remote description');
+
+  // Flush queued candidates
+  for (const c of candidateQueue) {
+    log('  ← flushing queued server ICE candidate');
+    await pc.addIceCandidate(c).catch(e => log('  ICE add error: ' + e.message));
+  }
+  candidateQueue = [];
+
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+  log('  created answer, publishing...');
+
+  try {
+    await nostrPublish(JSON.stringify({ type: 'answer', sdp: answer.sdp }));
+    log('  answer published via nostr');
+  } catch (e) {
+    log('  ERROR publishing answer: ' + e.message);
+  }
+}
+
+let candidateQueue = [];
+
+function handleCandidate(candidate, sdpMid, sdpMLineIndex) {
+  const c = { candidate, sdpMid: sdpMid || '0', sdpMLineIndex: sdpMLineIndex || 0 };
+  if (!pc || !pc.remoteDescription) {
+    candidateQueue.push(c);
+    log('  queued server candidate (no remote desc yet)');
+    return;
+  }
+  log('  ← server ICE: ' + candidate.slice(0, 50) + '...');
+  pc.addIceCandidate(c).catch(e => log('  ICE add error: ' + e.message));
+}
+
+// -- Send --
+window.sendMsg = function() {
+  const input = document.getElementById('msg');
+  const text = input.value.trim();
+  if (!text || !dc || dc.readyState !== 'open') return;
+  dc.send(text);
+  log('  → ' + text);
+  input.value = '';
+};
+document.getElementById('msg').addEventListener('keydown', (e) => { if (e.key === 'Enter') window.sendMsg(); });
+
+// -- Main --
+async function main() {
+  await initKeys();
+  log('secret: ' + SECRET);
+  log('topic:  ' + topic.slice(0, 16) + '...');
+  log('pubkey: ' + pubkey.slice(0, 16) + '...');
+  log('');
+
+  for (const url of RELAYS) {
+    log('connecting to ' + url + '...');
+    const ws = new WebSocket(url);
+    relayConns.push(ws);
+
+    ws.onopen = () => {
+      log('  connected to ' + url);
+      setStatus('◌ waiting for server...', '#ff0');
+      ws.send(JSON.stringify(['REQ', 'sub1', { kinds: [20100], '#d': [topic] }]));
+    };
+
+    ws.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      if (data[0] === 'EVENT') {
+        const event = data[2];
+        if (publishedIds.has(event.id)) return; // skip our own
+
+        let content;
+        try { content = JSON.parse(event.content); } catch { return; }
+
+        if (content.type === 'offer' && content.sdp) handleOffer(content.sdp);
+        else if (content.type === 'candidate' && content.candidate) handleCandidate(content.candidate, content.sdpMid, content.sdpMLineIndex);
+      } else if (data[0] === 'EOSE') {
+        log('  (end of stored events)');
+      } else if (data[0] === 'OK') {
+        if (data[2]) log('  relay accepted: ' + data[1].slice(0,16) + '...');
+        else log('  relay REJECTED: ' + (data[3] || '') + ' id=' + data[1].slice(0,16));
+      }
+    };
+
+    ws.onerror = () => log('  error on ' + url);
+    ws.onclose = () => log('  disconnected from ' + url);
+  }
+
+  log('waiting for server...');
+  log('(run: ./nowbox-server --secret test123)');
+}
+
+main();
+</script>
+</body>
+</html>

@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>nowbox</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
+</head>
+<body>
+  <!-- Auth wall -->
+  <div id="auth-wall" class="auth-wall">
+    <div class="logo" style="font-size:24px">nowbox</div>
+    <div class="loading-status">authenticating...</div>
+    <div id="auth-error" class="auth-error" style="display:none"></div>
+  </div>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <span class="logo">nowbox</span>
+      <div class="view-tabs">
+        <button class="view-tab active" data-view="chat">chat</button>
+        <button class="view-tab" data-view="terminal">terminal</button>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="users-indicator">
+        <span class="users-dot"></span>
+        <span id="user-count">1</span>
+      </div>
+      <button class="btn" id="share-btn">share</button>
+      <a class="btn btn-new" href="/" target="_blank">+ new</a>
+    </div>
+  </div>
+
+  <!-- Views -->
+  <div class="views">
+    <!-- Loading -->
+    <div id="view-loading" class="view loading-view active">
+      <div class="loading-cursor">&#9608;</div>
+      <div class="loading-status" id="loading-status">connecting...</div>
+      <div class="loading-stages">
+        <div class="loading-stage" data-stage="booting">&#9679; booting</div>
+        <div class="loading-stage" data-stage="installing_agent">&#9679; installing agent</div>
+        <div class="loading-stage" data-stage="starting_agent">&#9679; starting agent</div>
+        <div class="loading-stage" data-stage="ready">&#9679; ready</div>
+      </div>
+    </div>
+
+    <!-- Chat -->
+    <div id="view-chat" class="view chat-view">
+      <div class="chat-messages" id="chat-messages"></div>
+      <div class="chat-input-area">
+        <input type="text" class="chat-input" id="chat-input" placeholder="send a message..." autocomplete="off">
+        <button class="chat-send" id="chat-send">send</button>
+      </div>
+    </div>
+
+    <!-- Terminal -->
+    <div id="view-terminal" class="view terminal-view">
+      <div id="terminal-container" style="width:100%;height:100%"></div>
+    </div>
+  </div>
+
+  <!-- Share modal -->
+  <div id="share-modal" class="share-modal hidden">
+    <div class="share-content">
+      <h3>share this session</h3>
+      <input type="text" class="share-url" id="share-url" readonly>
+      <div class="share-actions">
+        <button class="btn" id="share-copy">copy</button>
+        <button class="btn" id="share-close">close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

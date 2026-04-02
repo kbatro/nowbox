@@ -1,0 +1,6 @@
+FROM alpine:latest
+RUN apk add --no-cache bash
+COPY nowbox-server-linux /usr/local/bin/nowbox-server
+RUN chmod +x /usr/local/bin/nowbox-server
+EXPOSE 8080
+CMD ["nowbox-server"]

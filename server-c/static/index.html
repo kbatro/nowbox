@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>nowbox</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
+</head>
+<body>
+  <!-- Auth wall -->
+  <div id="auth-wall" class="wall">
+    <a href="https://nowbox.dev" class="logo-link">
+      <svg class="logo-icon" viewBox="0 0 100 100" width="48" height="48"><use href="#tesseract"/></svg>
+      <span class="logo-text-big">nowbox</span>
+    </a>
+    <div class="dim">authenticating...</div>
+    <div id="auth-error" class="error" style="display:none"></div>
+  </div>
+
+  <!-- Preflight: no agent, waiting -->
+  <div id="preflight" class="wall hidden">
+    <a href="https://nowbox.dev" class="logo-link">
+      <svg class="logo-icon" viewBox="0 0 100 100" width="48" height="48"><use href="#tesseract"/></svg>
+      <span class="logo-text-big">nowbox</span>
+    </a>
+    <div class="dim">no agent configured</div>
+    <div class="dim small">waiting for bootstrap...</div>
+  </div>
+
+  <!-- Installing -->
+  <div id="installing" class="wall hidden">
+    <a href="https://nowbox.dev" class="logo-link">
+      <svg class="logo-icon spin" viewBox="0 0 100 100" width="48" height="48"><use href="#tesseract"/></svg>
+      <span class="logo-text-big">nowbox</span>
+    </a>
+    <div class="blink">installing agent...</div>
+  </div>
+
+  <!-- Postflight: full-screen CLI -->
+  <div id="postflight" class="postflight hidden">
+    <div class="bar">
+      <div class="bar-l">
+        <a href="https://nowbox.dev" class="bar-logo">
+          <svg class="logo-icon-sm" viewBox="0 0 100 100" width="16" height="16"><use href="#tesseract"/></svg>
+          <span class="logo-text-sm">nowbox</span>
+        </a>
+      </div>
+      <div class="bar-r">
+        <span class="dot"></span><span id="user-count">1</span>
+        <button class="btn" id="share-btn">share</button>
+        <a class="btn dim" href="/" target="_blank">+ new</a>
+      </div>
+    </div>
+    <div id="cli"></div>
+  </div>
+
+  <!-- Share modal -->
+  <div id="share-modal" class="modal hidden">
+    <div class="modal-box">
+      <div class="accent bold">share this session</div>
+      <input type="text" class="share-input" id="share-url" readonly>
+      <div class="modal-actions">
+        <button class="btn" id="share-copy">copy</button>
+        <button class="btn" id="share-close">close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tesseract SVG symbol -->
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+    <symbol id="tesseract" viewBox="0 0 100 100">
+      <!-- Outer cube -->
+      <polygon points="15,30 50,10 85,30 85,70 50,90 15,70"
+        fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+      <line x1="50" y1="10" x2="50" y2="50" stroke="currentColor" stroke-width="1.5"/>
+      <line x1="15" y1="30" x2="15" y2="70" stroke="currentColor" stroke-width="1.5"/>
+      <line x1="85" y1="30" x2="85" y2="70" stroke="currentColor" stroke-width="1.5"/>
+      <line x1="15" y1="70" x2="50" y2="90" stroke="currentColor" stroke-width="1.5"/>
+      <line x1="85" y1="70" x2="50" y2="90" stroke="currentColor" stroke-width="1.5"/>
+      <!-- Inner cube -->
+      <polygon points="30,40 50,28 70,40 70,64 50,76 30,64"
+        fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" opacity="0.6"/>
+      <line x1="50" y1="28" x2="50" y2="52" stroke="currentColor" stroke-width="1.2" opacity="0.6"/>
+      <line x1="30" y1="40" x2="30" y2="64" stroke="currentColor" stroke-width="1.2" opacity="0.6"/>
+      <line x1="70" y1="40" x2="70" y2="64" stroke="currentColor" stroke-width="1.2" opacity="0.6"/>
+      <!-- Connecting edges (tesseract 4D projection) -->
+      <line x1="15" y1="30" x2="30" y2="40" stroke="currentColor" stroke-width="0.8" opacity="0.3"/>
+      <line x1="50" y1="10" x2="50" y2="28" stroke="currentColor" stroke-width="0.8" opacity="0.3"/>
+      <line x1="85" y1="30" x2="70" y2="40" stroke="currentColor" stroke-width="0.8" opacity="0.3"/>
+      <line x1="15" y1="70" x2="30" y2="64" stroke="currentColor" stroke-width="0.8" opacity="0.3"/>
+      <line x1="85" y1="70" x2="70" y2="64" stroke="currentColor" stroke-width="0.8" opacity="0.3"/>
+      <line x1="50" y1="90" x2="50" y2="76" stroke="currentColor" stroke-width="0.8" opacity="0.3"/>
+      <!-- Vertices -->
+      <circle cx="50" cy="10" r="2" fill="currentColor"/>
+      <circle cx="15" cy="30" r="2" fill="currentColor"/>
+      <circle cx="85" cy="30" r="2" fill="currentColor"/>
+      <circle cx="15" cy="70" r="2" fill="currentColor"/>
+      <circle cx="85" cy="70" r="2" fill="currentColor"/>
+      <circle cx="50" cy="90" r="2" fill="currentColor"/>
+      <circle cx="50" cy="28" r="1.5" fill="currentColor" opacity="0.6"/>
+      <circle cx="30" cy="40" r="1.5" fill="currentColor" opacity="0.6"/>
+      <circle cx="70" cy="40" r="1.5" fill="currentColor" opacity="0.6"/>
+      <circle cx="30" cy="64" r="1.5" fill="currentColor" opacity="0.6"/>
+      <circle cx="70" cy="64" r="1.5" fill="currentColor" opacity="0.6"/>
+      <circle cx="50" cy="76" r="1.5" fill="currentColor" opacity="0.6"/>
+    </symbol>
+  </svg>
+
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

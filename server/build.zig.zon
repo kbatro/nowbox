@@ -1,0 +1,18 @@
+.{
+    .name = .nowbox_server,
+    .version = "0.1.0",
+    .fingerprint = 0x61f1d973f9c9d0f4,
+    .minimum_zig_version = "0.15.2",
+    .dependencies = .{
+        .httpz = .{
+            .url = "git+https://github.com/karlseguin/http.zig?ref=master#af1df361d599dbc3f9534b0183a8b5e3fe2af83e",
+            .hash = "httpz-0.0.0-PNVzrMpOBwCS42DpyNnY8WTlwcuzannBeDLuqkUV8H7-",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "static",
+    },
+}

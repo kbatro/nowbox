@@ -1,0 +1,5 @@
+FROM alpine:latest
+COPY nowbox-server /nowbox-server
+RUN chmod +x /nowbox-server
+EXPOSE 8080
+CMD ["/nowbox-server"]

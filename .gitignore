@@ -1,0 +1,15 @@
+# Build artifacts
+server-c/nowbox-server
+server-c/static_files.h
+server/nowbox-server
+server/nowbox-server-linux
+server/.zig-cache/
+server/zig-out/
+
+# Dependencies
+node_modules/
+.zig-cache/
+
+# OS
+.DS_Store
+server/main
